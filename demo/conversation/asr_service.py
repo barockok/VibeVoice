@@ -81,5 +81,16 @@ class ASRService:
 
         input_len = inputs["input_ids"].shape[1]
         generated = output_ids[0, input_len:]
-        text = self.processor.tokenizer.decode(generated, skip_special_tokens=True)
-        return text.strip()
+        raw = self.processor.tokenizer.decode(generated, skip_special_tokens=True).strip()
+
+        # ASR model outputs structured JSON like:
+        # [{"Start":0,"End":5.38,"Speaker":0,"Content":"Hello world"}]
+        # Extract just the text content.
+        try:
+            import json
+            segments = json.loads(raw)
+            if isinstance(segments, list):
+                return " ".join(seg.get("Content", "") for seg in segments).strip()
+        except (json.JSONDecodeError, TypeError, AttributeError):
+            pass
+        return raw
