@@ -83,14 +83,27 @@ class ASRService:
         generated = output_ids[0, input_len:]
         raw = self.processor.tokenizer.decode(generated, skip_special_tokens=True).strip()
 
-        # ASR model outputs structured JSON like:
-        # [{"Start":0,"End":5.38,"Speaker":0,"Content":"Hello world"}]
+        # ASR model outputs structured text like:
+        # assistant [{"Start":0,"End":5.38,"Speaker":0,"Content":"Hello world"}]
         # Extract just the text content.
-        try:
-            import json
-            segments = json.loads(raw)
-            if isinstance(segments, list):
-                return " ".join(seg.get("Content", "") for seg in segments).strip()
-        except (json.JSONDecodeError, TypeError, AttributeError):
-            pass
-        return raw
+        import json
+        import re
+
+        # Strip role prefix (e.g. "assistant ")
+        text = re.sub(r'^(assistant|user)\s*', '', raw, flags=re.IGNORECASE).strip()
+
+        # Find JSON array in the output
+        match = re.search(r'\[.*\]', text, flags=re.DOTALL)
+        if match:
+            try:
+                segments = json.loads(match.group())
+                if isinstance(segments, list):
+                    content = " ".join(
+                        seg.get("Content", "") for seg in segments if isinstance(seg, dict)
+                    ).strip()
+                    if content:
+                        return content
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        return text
