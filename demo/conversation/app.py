@@ -98,6 +98,10 @@ async def conversation_ws(ws: WebSocket):
                     voice_key = data.get("voice")
                     continue
 
+                if msg_type == "start_recording":
+                    audio_buffer.clear()
+                    continue
+
                 if msg_type == "stop_recording":
                     if not audio_buffer:
                         await ws_send_json(ws, {"type": "error", "message": "No audio received"})

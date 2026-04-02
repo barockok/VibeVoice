@@ -287,6 +287,8 @@
   let playNode = null;
   let playBuffer = new Float32Array(0);
   let playStarted = false;
+  let silentFrames = 0;
+  let ttsComplete = false;
 
   // ---- Logging ----
   function log(msg) {
@@ -329,6 +331,8 @@
 
   function startPlayback() {
     if (playCtx) return;
+    ttsComplete = false;
+    silentFrames = 0;
     playCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
     playNode = playCtx.createScriptProcessor(BUFFER_SIZE, 0, 1);
     playStarted = false;
@@ -348,8 +352,13 @@
       const avail = playBuffer.length;
       if (avail === 0) {
         out.fill(0);
+        if (ttsComplete) {
+          silentFrames++;
+          if (silentFrames >= 4) { stopPlayback(); }
+        }
         return;
       }
+      silentFrames = 0;
       if (avail <= out.length) {
         out.set(playBuffer);
         for (let i = avail; i < out.length; i++) out[i] = 0;
@@ -462,7 +471,7 @@
       log('TTS stream started');
     } else if (t === 'tts_end') {
       log('TTS stream ended');
-      // Don't stop playback immediately; let buffer drain
+      ttsComplete = true;
     } else if (t === 'error') {
       log('Error: ' + data.message);
     } else {
