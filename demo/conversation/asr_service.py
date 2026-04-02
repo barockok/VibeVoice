@@ -58,7 +58,7 @@ class ASRService:
             raise RuntimeError("ASR service not loaded")
 
         inputs = self.processor(
-            audio=[(audio, sample_rate)],
+            audio=[audio],
             sampling_rate=sample_rate,
             return_tensors="pt",
             padding=True,
