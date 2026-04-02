@@ -8,7 +8,7 @@ import uvicorn
 def main():
     p = argparse.ArgumentParser(description="VibeVoice Live Conversation Demo")
     p.add_argument("--port", type=int, default=3001)
-    p.add_argument("--asr-model", type=str, default="microsoft/VibeVoice-ASR-0.5B")
+    p.add_argument("--asr-model", type=str, default="microsoft/VibeVoice-ASR")
     p.add_argument("--tts-model", type=str, default="microsoft/VibeVoice-Realtime-0.5B")
     p.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda", "mps"])
     p.add_argument("--voices-dir", type=str, default=None,

@@ -39,7 +39,7 @@ async def ws_send_json(ws: WebSocket, data: dict):
 async def startup():
     import os
 
-    asr_model = os.environ.get("ASR_MODEL_PATH", "microsoft/VibeVoice-ASR-0.5B")
+    asr_model = os.environ.get("ASR_MODEL_PATH", "microsoft/VibeVoice-ASR")
     tts_model = os.environ.get("TTS_MODEL_PATH", "microsoft/VibeVoice-Realtime-0.5B")
     voices_dir = os.environ.get("VOICES_DIR", str(BASE.parent / "voices" / "streaming_model"))
     device = os.environ.get("MODEL_DEVICE", "cuda")

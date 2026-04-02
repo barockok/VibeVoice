@@ -19,7 +19,10 @@ class ASRService:
 
     def load(self) -> None:
         print(f"[ASR] Loading processor from {self.model_path}")
-        self.processor = VibeVoiceASRProcessor.from_pretrained(self.model_path)
+        self.processor = VibeVoiceASRProcessor.from_pretrained(
+            self.model_path,
+            language_model_pretrained_name="Qwen/Qwen2.5-7B",
+        )
 
         dtype = torch.bfloat16 if self.device == "cuda" else torch.float32
         attn = "flash_attention_2" if self.device == "cuda" else "sdpa"

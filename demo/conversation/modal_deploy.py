@@ -13,7 +13,7 @@ app = modal.App("vibevoice-conversation")
 
 def download_models():
     from huggingface_hub import snapshot_download
-    snapshot_download("microsoft/VibeVoice-ASR-0.5B")
+    snapshot_download("microsoft/VibeVoice-ASR")
     snapshot_download("microsoft/VibeVoice-Realtime-0.5B")
 
 
@@ -72,7 +72,7 @@ image = (
 
 @app.function(
     image=image,
-    gpu="A10G",
+    gpu="A100",
     timeout=600,
     scaledown_window=300,
     secrets=[modal.Secret.from_name("huggingface-secret")],
@@ -101,7 +101,7 @@ def serve():
     from response_generator import TemplateResponseGenerator
 
     SAMPLE_RATE = 24_000
-    ASR_MODEL = "microsoft/VibeVoice-ASR-0.5B"
+    ASR_MODEL = "microsoft/VibeVoice-ASR"
     TTS_MODEL = "microsoft/VibeVoice-Realtime-0.5B"
     VOICES_DIR = "/voices/streaming_model"
     INDEX_HTML = Path("/app/index.html")
