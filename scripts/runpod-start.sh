@@ -38,8 +38,8 @@ if [ ! -f "$MARKER" ]; then
     echo "[setup] Installing Python dependencies..."
     pip install --upgrade pip setuptools wheel
 
-    # Upgrade PyTorch to 2.5.1 (base image has 2.4.0 which conflicts with NeMo deps)
-    pip install torch==2.5.1 torchvision torchaudio \
+    # Upgrade PyTorch to 2.6.0 (NeMo 2.7.2 requires >=2.6.0)
+    pip install torch==2.6.0 torchvision torchaudio \
         --extra-index-url https://download.pytorch.org/whl/cu124
 
     # Pin transformers to 4.x (5.x breaks VibeVoice internals)
@@ -54,7 +54,7 @@ if [ ! -f "$MARKER" ]; then
 
     # Re-pin after NeMo (it may pull incompatible versions)
     pip install "transformers>=4.57.0,<5.0.0"
-    pip install torch==2.5.1 torchvision torchaudio \
+    pip install torch==2.6.0 torchvision torchaudio \
         --extra-index-url https://download.pytorch.org/whl/cu124
 
     # VibeVoice from local checkout (with exist_ok fixes)
