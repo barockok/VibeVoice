@@ -6,19 +6,15 @@ set -euo pipefail
 # Models persist on /workspace volume across restarts.
 
 GPU_TYPE="${GPU_TYPE:-NVIDIA GeForce RTX 3090}"
-CLOUD_TYPE="${CLOUD_TYPE:-COMMUNITY}"
 POD_NAME="${POD_NAME:-vibevoice-conversation}"
 CONTAINER_DISK="${CONTAINER_DISK:-40}"
 VOLUME_SIZE="${VOLUME_SIZE:-80}"
 
-# Base CUDA image with Python 3.11
+# Base CUDA image with Python
 IMAGE="nvidia/cuda:12.4.0-devel-ubuntu22.04"
 
-# Startup command: download script from repo and execute
-STARTUP_CMD="apt-get update && apt-get install -y curl git && curl -sSL https://raw.githubusercontent.com/barockok/VibeVoice/feat/live-conversation-demo/scripts/runpod-start.sh | bash"
-
 echo "=== VibeVoice Conversation Demo — RunPod Deploy ==="
-echo "GPU:    $GPU_TYPE ($CLOUD_TYPE)"
+echo "GPU:    $GPU_TYPE (COMMUNITY)"
 echo "Image:  $IMAGE"
 echo "Pod:    $POD_NAME"
 echo "Disk:   ${CONTAINER_DISK}GB container + ${VOLUME_SIZE}GB volume"
@@ -27,12 +23,13 @@ echo ""
 runpodctl create pod \
   --name "$POD_NAME" \
   --gpuType "$GPU_TYPE" \
-  --cloudType "$CLOUD_TYPE" \
+  --communityCloud \
   --imageName "$IMAGE" \
   --containerDiskSize "$CONTAINER_DISK" \
   --volumeSize "$VOLUME_SIZE" \
   --volumePath "/workspace" \
   --ports "8000/http" \
+  --startSSH \
   --env "HF_HOME=/workspace/models" \
   --env "STT_ENGINE=parakeet" \
   --env "LLM_ENGINE=qwen" \
