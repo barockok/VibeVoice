@@ -3,17 +3,24 @@
 import asyncio
 import datetime
 import json
+import re
 import threading
 import traceback
 from pathlib import Path
 from typing import cast
 
 import numpy as np
-from fastapi import FastAPI, WebSocket
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request, WebSocket
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from starlette.websockets import WebSocketDisconnect, WebSocketState
 
 from demo.conversation.response_generator import TemplateResponseGenerator
+
+# Patterns that indicate noise/non-speech from ASR
+NOISE_PATTERNS = re.compile(
+    r"^\[?(Noise|Silence|Unintelligible Speech|Music|Applause|Laughter)\]?$",
+    re.IGNORECASE,
+)
 
 SAMPLE_RATE = 24_000
 BASE = Path(__file__).parent
@@ -83,10 +90,153 @@ def index():
     return FileResponse(BASE / "index.html")
 
 
+@app.get("/health")
+def health():
+    asr_ok = hasattr(app.state, "asr") and app.state.asr.model is not None
+    tts_ok = hasattr(app.state, "tts") and app.state.tts.model is not None
+    llm_ok = hasattr(app.state, "responder") and app.state.responder is not None
+    all_ok = asr_ok and tts_ok and llm_ok
+    return {
+        "status": "ok" if all_ok else "degraded",
+        "models": {
+            "asr": "loaded" if asr_ok else "not_loaded",
+            "tts": "loaded" if tts_ok else "not_loaded",
+            "vad": "loaded",  # VAD is handled by Rust server
+            "llm": "loaded" if llm_ok else "not_loaded",
+        },
+    }
+
+
 @app.get("/config")
 def config():
-    tts: TTSService = app.state.tts
+    tts = app.state.tts
     return {"voices": tts.get_voices(), "default_voice": tts.default_voice_key}
+
+
+def _is_noise(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return True
+    if NOISE_PATTERNS.match(stripped):
+        return True
+    if stripped.startswith("[") and stripped.endswith("]"):
+        return True
+    return False
+
+
+# ── HTTP API (sidecar-compatible with OttrVoice Rust server) ──
+
+
+@app.post("/api/stt")
+async def stt(request: Request):
+    """Transcribe a complete utterance (raw PCM16 bytes). Returns JSON with transcription + LLM quick reply."""
+    asr = app.state.asr
+    responder = app.state.responder
+
+    body = await request.body()
+    if not body:
+        return JSONResponse({"text": "", "cleaned_text": "", "quick_reply": "", "is_noise": True, "timing": None})
+
+    pcm16 = np.frombuffer(body, dtype=np.int16)
+    audio_float = pcm16.astype(np.float32) / 32768.0
+
+    # Skip very short audio
+    if audio_float.size < SAMPLE_RATE * 0.3:
+        return JSONResponse({"text": "", "cleaned_text": "", "quick_reply": "", "is_noise": True, "timing": None})
+
+    try:
+        transcription = await asyncio.to_thread(asr.transcribe, audio_float, SAMPLE_RATE)
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({"error": f"ASR error: {e}"}, status_code=500)
+
+    if _is_noise(transcription):
+        return JSONResponse({"text": "", "cleaned_text": "", "quick_reply": "", "is_noise": True, "timing": None})
+
+    # Use Qwen LLM for cleaning + quick reply generation
+    call_context = request.headers.get("x-call-context", "")
+    call_tone = request.headers.get("x-call-tone", "")
+
+    try:
+        # Build a prompt for transcript cleaning + quick reply
+        quick_reply = await asyncio.to_thread(
+            _generate_quick_reply, responder, transcription, call_context, call_tone
+        )
+    except Exception as e:
+        traceback.print_exc()
+        quick_reply = ""
+
+    return JSONResponse({
+        "text": transcription,
+        "cleaned_text": transcription,  # Parakeet output is already clean
+        "quick_reply": quick_reply,
+        "is_noise": False,
+        "timing": None,
+    })
+
+
+def _generate_quick_reply(responder, transcription: str, context: str, tone: str) -> str:
+    """Use Qwen to generate a brief filler/acknowledgment reply."""
+    if not hasattr(responder, 'generate'):
+        return ""
+
+    prompt = f"The user said: \"{transcription}\""
+    if context:
+        prompt += f"\nContext: {context}"
+    if tone:
+        prompt += f"\nTone: {tone}"
+    prompt += "\nGenerate a brief (3-8 word) natural acknowledgment or filler response."
+
+    # Use the responder's generate method with empty history for quick reply
+    try:
+        reply = responder.generate(prompt, [])
+        # Truncate if too long
+        words = reply.split()
+        if len(words) > 10:
+            reply = " ".join(words[:8])
+        return reply
+    except Exception:
+        return ""
+
+
+@app.post("/api/tts")
+async def tts_endpoint(request: Request):
+    """Synthesize text to speech, streaming PCM16 audio bytes."""
+    tts = app.state.tts
+
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+
+    text = data.get("text", "")
+    voice = data.get("voice", None)
+
+    if not text.strip():
+        return StreamingResponse(iter([]), media_type="application/octet-stream")
+
+    stop_event = threading.Event()
+
+    async def generate():
+        try:
+            iterator = tts.stream(text, voice_key=voice, stop_event=stop_event)
+            sentinel = object()
+            while True:
+                if await request.is_disconnected():
+                    stop_event.set()
+                    break
+                chunk = await asyncio.to_thread(next, iterator, sentinel)
+                if chunk is sentinel:
+                    break
+                payload = tts.chunk_to_pcm16(cast(np.ndarray, chunk))
+                yield payload
+        except Exception:
+            traceback.print_exc()
+            stop_event.set()
+        finally:
+            stop_event.set()
+
+    return StreamingResponse(generate(), media_type="application/octet-stream")
 
 
 @app.websocket("/ws")
