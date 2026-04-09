@@ -24,10 +24,14 @@ class ParakeetASRService:
         import nemo.collections.asr as nemo_asr
 
         print(f"[ASR] Loading Parakeet model: {self.model_name}")
+        # Load on CPU first to avoid cuDNN init issues, then move to device
         self.model = nemo_asr.models.ASRModel.from_pretrained(
             model_name=self.model_name,
+            map_location="cpu",
         )
-        self.model = self.model.to(self.device)
+        if self.device != "cpu":
+            import torch
+            self.model = self.model.to(self.device)
         self.model.eval()
         print("[ASR] Parakeet model loaded.")
 

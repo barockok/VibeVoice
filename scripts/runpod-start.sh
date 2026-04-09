@@ -38,10 +38,10 @@ if [ ! -f "$MARKER" ]; then
     echo "[setup] Installing Python dependencies..."
     pip install --upgrade pip setuptools wheel
 
-    # Upgrade PyTorch to 2.6.0+cu124 (NeMo 2.7.2 requires >=2.6.0)
-    # Use --index-url (not --extra-index-url) to force cu124 wheels
+    # Upgrade PyTorch to 2.6.0+cu121 (NeMo 2.7.2 requires >=2.6.0)
+    # Use cu121 for broader driver compatibility on community GPUs
     pip install torch==2.6.0 torchaudio==2.6.0 torchvision==0.21.0 \
-        --index-url https://download.pytorch.org/whl/cu124
+        --index-url https://download.pytorch.org/whl/cu121
 
     # Pin transformers to 4.x (5.x breaks VibeVoice internals)
     pip install "transformers>=4.57.0,<5.0.0"
