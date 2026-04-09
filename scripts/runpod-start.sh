@@ -38,6 +38,10 @@ if [ ! -f "$MARKER" ]; then
     echo "[setup] Installing Python dependencies..."
     pip install --upgrade pip setuptools wheel
 
+    # Upgrade PyTorch to 2.5.1 (base image has 2.4.0 which conflicts with NeMo deps)
+    pip install torch==2.5.1 torchvision torchaudio \
+        --extra-index-url https://download.pytorch.org/whl/cu124
+
     # Pin transformers to 4.x (5.x breaks VibeVoice internals)
     pip install "transformers>=4.57.0,<5.0.0"
 
@@ -48,8 +52,10 @@ if [ ! -f "$MARKER" ]; then
     # NeMo for Parakeet STT
     pip install "nemo_toolkit[asr]"
 
-    # Re-pin transformers after NeMo install (NeMo may upgrade it)
+    # Re-pin after NeMo (it may pull incompatible versions)
     pip install "transformers>=4.57.0,<5.0.0"
+    pip install torch==2.5.1 torchvision torchaudio \
+        --extra-index-url https://download.pytorch.org/whl/cu124
 
     # VibeVoice from local checkout (with exist_ok fixes)
     pip install -e "$REPO_DIR"
