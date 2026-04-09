@@ -10,7 +10,7 @@ export HF_HUB_ENABLE_HF_TRANSFER=1
 export PYTHONUNBUFFERED=1
 
 REPO_DIR=/workspace/VibeVoice
-BRANCH="${BRANCH:-feat/live-conversation-demo}"
+BRANCH="${BRANCH:-main}"
 
 echo "=== VibeVoice Conversation Demo — Pod Startup ==="
 echo "Branch: $BRANCH"
