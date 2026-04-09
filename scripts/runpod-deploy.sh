@@ -2,19 +2,26 @@
 set -euo pipefail
 
 # VibeVoice Conversation Demo — RunPod Deployment
-# Deploys Parakeet STT + Qwen LLM + VibeVoice TTS on a single GPU
+# Deploys a pod with CUDA base image, startup script installs everything.
+# Models persist on /workspace volume across restarts.
 
-IMAGE="${IMAGE:-ghcr.io/barockok/vibevoice-conversation:latest}"
 GPU_TYPE="${GPU_TYPE:-NVIDIA GeForce RTX 3090}"
 CLOUD_TYPE="${CLOUD_TYPE:-COMMUNITY}"
 POD_NAME="${POD_NAME:-vibevoice-conversation}"
-CONTAINER_DISK="${CONTAINER_DISK:-20}"
-VOLUME_SIZE="${VOLUME_SIZE:-50}"
+CONTAINER_DISK="${CONTAINER_DISK:-40}"
+VOLUME_SIZE="${VOLUME_SIZE:-80}"
+
+# Base CUDA image with Python 3.11
+IMAGE="nvidia/cuda:12.4.0-devel-ubuntu22.04"
+
+# Startup command: download script from repo and execute
+STARTUP_CMD="apt-get update && apt-get install -y curl git && curl -sSL https://raw.githubusercontent.com/barockok/VibeVoice/feat/live-conversation-demo/scripts/runpod-start.sh | bash"
 
 echo "=== VibeVoice Conversation Demo — RunPod Deploy ==="
-echo "Image:  $IMAGE"
 echo "GPU:    $GPU_TYPE ($CLOUD_TYPE)"
+echo "Image:  $IMAGE"
 echo "Pod:    $POD_NAME"
+echo "Disk:   ${CONTAINER_DISK}GB container + ${VOLUME_SIZE}GB volume"
 echo ""
 
 runpodctl create pod \
@@ -32,5 +39,9 @@ runpodctl create pod \
   --env "MODEL_DEVICE=cuda"
 
 echo ""
-echo "Pod created. Check status:"
-echo "  runpodctl get pod"
+echo "Pod created. Next steps:"
+echo "  1. runpodctl get pod                    # check status"
+echo "  2. SSH into pod and run the startup script:"
+echo "     curl -sSL https://raw.githubusercontent.com/barockok/VibeVoice/feat/live-conversation-demo/scripts/runpod-start.sh | bash"
+echo ""
+echo "  Or use RunPod web terminal to run the startup script."
