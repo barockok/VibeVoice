@@ -39,20 +39,41 @@ async def ws_send_json(ws: WebSocket, data: dict):
 async def startup():
     import os
 
+    stt_engine = os.environ.get("STT_ENGINE", "parakeet")
+    llm_engine = os.environ.get("LLM_ENGINE", "qwen")
+    parakeet_model = os.environ.get("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
+    qwen_model = os.environ.get("QWEN_MODEL", "Qwen/Qwen2.5-7B-Instruct")
+
     asr_model = os.environ.get("ASR_MODEL_PATH", "microsoft/VibeVoice-ASR")
     tts_model = os.environ.get("TTS_MODEL_PATH", "microsoft/VibeVoice-Realtime-0.5B")
     voices_dir = os.environ.get("VOICES_DIR", str(BASE.parent / "voices" / "streaming_model"))
     device = os.environ.get("MODEL_DEVICE", "cuda")
 
-    asr = ASRService(model_path=asr_model, device=device)
+    # --- STT engine ---
+    if stt_engine == "parakeet":
+        from demo.conversation.parakeet_asr_service import ParakeetASRService
+
+        asr = ParakeetASRService(model_name=parakeet_model, device=device)
+    else:
+        asr = ASRService(model_path=asr_model, device=device)
     asr.load()
     app.state.asr = asr
 
+    # --- TTS ---
     tts = TTSService(model_path=tts_model, voices_dir=voices_dir, device=device)
     tts.load()
     app.state.tts = tts
 
-    app.state.responder = TemplateResponseGenerator()
+    # --- LLM response generator ---
+    if llm_engine == "qwen":
+        from demo.conversation.qwen_response_generator import QwenResponseGenerator
+
+        responder = QwenResponseGenerator(model_name=qwen_model, device=device)
+        responder.load()
+    else:
+        responder = TemplateResponseGenerator()
+    app.state.responder = responder
+
     app.state.lock = asyncio.Lock()
     print("[startup] Conversation server ready.")
 

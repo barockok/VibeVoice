@@ -1,0 +1,70 @@
+FROM nvidia/cuda:12.4.0-devel-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV HF_HOME=/workspace/models
+ENV PYTHONUNBUFFERED=1
+
+# System deps
+RUN apt-get update && apt-get install -y \
+    python3.11 python3.11-dev python3-pip python3.11-venv \
+    git ffmpeg libsndfile1 curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+
+RUN python3 -m pip install --upgrade pip setuptools wheel
+
+# PyTorch with CUDA 12.4
+RUN pip3 install --no-cache-dir \
+    torch==2.5.1 torchaudio==2.5.1 \
+    --extra-index-url https://download.pytorch.org/whl/cu124
+
+# Flash attention (needs CUDA devel headers)
+RUN pip3 install --no-cache-dir ninja packaging && \
+    pip3 install --no-cache-dir flash-attn --no-build-isolation
+
+# NeMo for Parakeet STT
+RUN pip3 install --no-cache-dir "nemo_toolkit[asr]"
+
+# VibeVoice TTS deps (transformers version aligned with NeMo ~4.57.x)
+RUN pip3 install --no-cache-dir \
+    accelerate diffusers numpy scipy librosa \
+    ml-collections absl-py soundfile \
+    "uvicorn[standard]" fastapi pydub requests
+
+# Install VibeVoice from GitHub (with exist_ok fixes for newer transformers)
+RUN pip3 install --no-cache-dir "vibevoice@git+https://github.com/barockok/VibeVoice.git@feat/live-conversation-demo"
+
+# Download all three models at build time
+RUN pip3 install --no-cache-dir hf_transfer
+ENV HF_HUB_ENABLE_HF_TRANSFER=1
+RUN python3 -c "\
+from huggingface_hub import snapshot_download; \
+snapshot_download('nvidia/parakeet-tdt-0.6b-v3'); \
+snapshot_download('microsoft/VibeVoice-Realtime-0.5B'); \
+snapshot_download('Qwen/Qwen2.5-7B-Instruct')"
+
+# Copy app code and voice presets
+WORKDIR /app
+COPY demo/conversation/parakeet_asr_service.py /app/demo/conversation/parakeet_asr_service.py
+COPY demo/conversation/qwen_response_generator.py /app/demo/conversation/qwen_response_generator.py
+COPY demo/conversation/response_generator.py /app/demo/conversation/response_generator.py
+COPY demo/conversation/tts_service.py /app/demo/conversation/tts_service.py
+COPY demo/conversation/asr_service.py /app/demo/conversation/asr_service.py
+COPY demo/conversation/app.py /app/demo/conversation/app.py
+COPY demo/conversation/index.html /app/demo/conversation/index.html
+COPY demo/conversation/__init__.py /app/demo/conversation/__init__.py
+RUN touch /app/demo/__init__.py
+
+COPY demo/voices/streaming_model/ /voices/streaming_model/
+
+# Environment defaults
+ENV STT_ENGINE=parakeet
+ENV LLM_ENGINE=qwen
+ENV TTS_MODEL_PATH=microsoft/VibeVoice-Realtime-0.5B
+ENV VOICES_DIR=/voices/streaming_model
+ENV MODEL_DEVICE=cuda
+
+EXPOSE 8000
+
+CMD ["python3", "-m", "uvicorn", "demo.conversation.app:app", "--host", "0.0.0.0", "--port", "8000"]
