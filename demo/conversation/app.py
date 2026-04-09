@@ -13,8 +13,6 @@ from fastapi import FastAPI, WebSocket
 from fastapi.responses import FileResponse
 from starlette.websockets import WebSocketDisconnect, WebSocketState
 
-from demo.conversation.asr_service import ASRService
-from demo.conversation.tts_service import TTSService
 from demo.conversation.response_generator import TemplateResponseGenerator
 
 SAMPLE_RATE = 24_000
@@ -55,11 +53,13 @@ async def startup():
 
         asr = ParakeetASRService(model_name=parakeet_model, device=device)
     else:
+        from demo.conversation.asr_service import ASRService
         asr = ASRService(model_path=asr_model, device=device)
     asr.load()
     app.state.asr = asr
 
     # --- TTS ---
+    from demo.conversation.tts_service import TTSService
     tts = TTSService(model_path=tts_model, voices_dir=voices_dir, device=device)
     tts.load()
     app.state.tts = tts
