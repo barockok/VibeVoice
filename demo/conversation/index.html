@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VibeVoice Live Conversation</title>
+<style>
+  :root {
+    --bg: #f5f7fc;
+    --surface: #ffffff;
+    --accent: #5562ff;
+    --accent-strong: #3f4dff;
+    --text-primary: #1f2742;
+    --text-muted: #5d6789;
+    --border: rgba(85, 98, 255, 0.18);
+    --shadow: 0 18px 45px rgba(31, 39, 66, 0.08);
+    --user-bubble: #eef1ff;
+    --assistant-bubble: #f0faf4;
+    --dot-listening: #22c55e;
+    --dot-recording: #ef4444;
+    --dot-processing: #f59e0b;
+    --dot-speaking: #3b82f6;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, sans-serif;
+    color: var(--text-primary);
+    display: flex;
+    justify-content: center;
+    padding: 48px 20px;
+  }
+
+  .app-shell {
+    width: min(720px, 100%);
+    background: var(--surface);
+    border-radius: 20px;
+    padding: 36px 40px 44px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+
+  /* Status bar */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--dot-listening);
+    transition: background 0.2s;
+  }
+
+  .status-dot.listening  { background: var(--dot-listening); }
+  .status-dot.recording  { background: var(--dot-recording); animation: pulse 1s infinite; }
+  .status-dot.processing { background: var(--dot-processing); animation: pulse 0.6s infinite; }
+  .status-dot.speaking   { background: var(--dot-speaking); animation: pulse 1.2s infinite; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.3); }
+  }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .inline-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .field-label {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .select-control {
+    width: 180px;
+    border: 1px solid rgba(31, 39, 66, 0.14);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    background: #fbfcff;
+    color: var(--text-primary);
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .select-control:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(85, 98, 255, 0.18);
+  }
+
+  /* Talk button */
+  .talk-btn {
+    flex: 1;
+    min-width: 160px;
+    padding: 14px 28px;
+    border: none;
+    border-radius: 999px;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 8px 16px rgba(85, 98, 255, 0.25);
+    transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+
+  .talk-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 20px rgba(85, 98, 255, 0.28); }
+  .talk-btn:active, .talk-btn.active { transform: translateY(0); background: var(--accent-strong); }
+  .talk-btn.recording { background: #ef4444; box-shadow: 0 8px 16px rgba(239, 68, 68, 0.3); }
+
+  /* Chat transcript */
+  .chat-area {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 4px 0;
+  }
+
+  .chat-area:empty::after {
+    content: 'Hold Space or press the button to talk.';
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 14px;
+    padding: 32px 0;
+  }
+
+  .bubble {
+    max-width: 80%;
+    padding: 12px 16px;
+    border-radius: 16px;
+    font-size: 14px;
+    line-height: 1.55;
+    word-break: break-word;
+  }
+
+  .bubble.user {
+    align-self: flex-end;
+    background: var(--user-bubble);
+    border-bottom-right-radius: 4px;
+  }
+
+  .bubble.assistant {
+    align-self: flex-start;
+    background: var(--assistant-bubble);
+    border-bottom-left-radius: 4px;
+  }
+
+  .bubble-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+
+  /* Logs */
+  details {
+    font-size: 13px;
+  }
+
+  details summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-muted);
+    user-select: none;
+  }
+
+  #logOutput {
+    max-height: 200px;
+    overflow-y: auto;
+    background: #f7f9ff;
+    color: var(--text-primary);
+    padding: 12px 14px;
+    border: 1px solid rgba(31, 39, 66, 0.12);
+    border-radius: 10px;
+    font-size: 12px;
+    line-height: 1.6;
+    font-family: 'Fira Code', 'Courier New', Courier, monospace;
+    margin-top: 8px;
+    white-space: pre-wrap;
+  }
+
+  .helper-text {
+    text-align: center;
+    font-size: 12px;
+    color: #8a93b5;
+  }
+
+  @media (max-width: 600px) {
+    .app-shell { padding: 24px 18px 32px; }
+    .controls { flex-direction: column; }
+    .select-control { width: 100%; }
+    .talk-btn { width: 100%; }
+    .bubble { max-width: 90%; }
+  }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <h1>VibeVoice Live Conversation</h1>
+
+  <div class="status-bar">
+    <span class="status-dot listening" id="statusDot"></span>
+    <span id="statusText">Listening</span>
+  </div>
+
+  <div class="controls">
+    <div class="inline-field">
+      <span class="field-label">Voice</span>
+      <select id="voiceSelect" class="select-control">
+        <option value="">Loading...</option>
+      </select>
+    </div>
+    <button class="talk-btn" id="talkBtn">Hold to Talk</button>
+  </div>
+
+  <div class="chat-area" id="chatArea"></div>
+
+  <p class="helper-text">Hold <kbd>Space</kbd> or press and hold the button to record. Release to send.</p>
+
+  <details>
+    <summary>Runtime Logs</summary>
+    <pre id="logOutput"></pre>
+  </details>
+</div>
+
+<script>
+(() => {
+  const SAMPLE_RATE = 24000;
+  const BUFFER_SIZE = 2048;
+  const PREBUFFER_SEC = 0.08;
+
+  const statusDot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+  const voiceSelect = document.getElementById('voiceSelect');
+  const talkBtn = document.getElementById('talkBtn');
+  const chatArea = document.getElementById('chatArea');
+  const logOutput = document.getElementById('logOutput');
+
+  let ws = null;
+  let micStream = null;
+  let micCtx = null;
+  let micProcessor = null;
+  let isRecording = false;
+  let reconnectTimer = null;
+
+  // TTS playback state
+  let playCtx = null;
+  let playNode = null;
+  let playBuffer = new Float32Array(0);
+  let playStarted = false;
+  let silentFrames = 0;
+  let ttsComplete = false;
+
+  // ---- Logging ----
+  function log(msg) {
+    const ts = new Date().toISOString().replace('T', ' ').slice(0, 23);
+    if (logOutput) {
+      logOutput.textContent += '[' + ts + '] ' + msg + '\n';
+      logOutput.scrollTop = logOutput.scrollHeight;
+    }
+  }
+
+  // ---- Status ----
+  function setStatus(state) {
+    const labels = { listening: 'Listening', recording: 'Recording', processing: 'Processing', speaking: 'Speaking' };
+    statusDot.className = 'status-dot ' + state;
+    statusText.textContent = labels[state] || state;
+  }
+
+  // ---- Chat bubbles ----
+  function addBubble(role, text) {
+    const wrap = document.createElement('div');
+    wrap.className = 'bubble ' + role;
+    const label = document.createElement('div');
+    label.className = 'bubble-label';
+    label.textContent = role === 'user' ? 'You' : 'Assistant';
+    const body = document.createElement('div');
+    body.textContent = text;
+    wrap.appendChild(label);
+    wrap.appendChild(body);
+    chatArea.appendChild(wrap);
+    chatArea.scrollTop = chatArea.scrollHeight;
+  }
+
+  // ---- TTS Playback ----
+  function appendPlayAudio(float32) {
+    const merged = new Float32Array(playBuffer.length + float32.length);
+    merged.set(playBuffer, 0);
+    merged.set(float32, playBuffer.length);
+    playBuffer = merged;
+  }
+
+  function startPlayback() {
+    if (playCtx) return;
+    ttsComplete = false;
+    silentFrames = 0;
+    playCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+    playNode = playCtx.createScriptProcessor(BUFFER_SIZE, 0, 1);
+    playStarted = false;
+
+    const minSamples = Math.floor(SAMPLE_RATE * PREBUFFER_SEC);
+
+    playNode.onaudioprocess = function(e) {
+      const out = e.outputBuffer.getChannelData(0);
+      if (!playStarted) {
+        if (playBuffer.length >= minSamples) {
+          playStarted = true;
+        } else {
+          out.fill(0);
+          return;
+        }
+      }
+      const avail = playBuffer.length;
+      if (avail === 0) {
+        out.fill(0);
+        if (ttsComplete) {
+          silentFrames++;
+          if (silentFrames >= 4) { stopPlayback(); }
+        }
+        return;
+      }
+      silentFrames = 0;
+      if (avail <= out.length) {
+        out.set(playBuffer);
+        for (let i = avail; i < out.length; i++) out[i] = 0;
+        playBuffer = new Float32Array(0);
+      } else {
+        out.set(playBuffer.subarray(0, out.length));
+        playBuffer = playBuffer.subarray(out.length);
+      }
+    };
+    playNode.connect(playCtx.destination);
+    log('Playback context started');
+  }
+
+  function stopPlayback() {
+    if (playNode) { try { playNode.disconnect(); } catch(e) {} playNode = null; }
+    if (playCtx) { try { playCtx.close(); } catch(e) {} playCtx = null; }
+    playBuffer = new Float32Array(0);
+    playStarted = false;
+  }
+
+  // ---- Voice loader ----
+  async function loadVoices() {
+    try {
+      const resp = await fetch('/config');
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      const voices = Array.isArray(data.voices) ? data.voices : [];
+      voiceSelect.innerHTML = '';
+      if (voices.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = ''; opt.textContent = 'No voices';
+        voiceSelect.appendChild(opt);
+        voiceSelect.disabled = true;
+        return;
+      }
+      voices.forEach(function(v) {
+        const opt = document.createElement('option');
+        opt.value = v; opt.textContent = v;
+        voiceSelect.appendChild(opt);
+      });
+      if (data.default_voice && voices.includes(data.default_voice)) {
+        voiceSelect.value = data.default_voice;
+      }
+      voiceSelect.disabled = false;
+      log('Loaded ' + voices.length + ' voices');
+    } catch (err) {
+      log('Failed to load voices: ' + err.message);
+      voiceSelect.innerHTML = '<option value="">Error</option>';
+      voiceSelect.disabled = true;
+    }
+  }
+
+  // ---- WebSocket ----
+  function connectWS() {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const url = proto + '//' + location.host + '/ws';
+    ws = new WebSocket(url);
+    ws.binaryType = 'arraybuffer';
+
+    ws.onopen = function() {
+      log('WebSocket connected');
+      // Send current voice config
+      if (voiceSelect.value) {
+        ws.send(JSON.stringify({ type: 'config', voice: voiceSelect.value }));
+      }
+    };
+
+    ws.onmessage = function(evt) {
+      if (typeof evt.data === 'string') {
+        handleTextMessage(evt.data);
+      } else if (evt.data instanceof ArrayBuffer) {
+        // PCM16 TTS audio -> float32
+        const view = new DataView(evt.data);
+        const samples = new Float32Array(view.byteLength / 2);
+        for (let i = 0; i < samples.length; i++) {
+          samples[i] = view.getInt16(i * 2, true) / 32768;
+        }
+        appendPlayAudio(samples);
+      }
+    };
+
+    ws.onclose = function() {
+      log('WebSocket disconnected, reconnecting in 2s...');
+      ws = null;
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(connectWS, 2000);
+    };
+
+    ws.onerror = function(err) {
+      log('WebSocket error');
+    };
+  }
+
+  function handleTextMessage(raw) {
+    var data;
+    try { data = JSON.parse(raw); } catch(e) { log('Bad JSON: ' + raw); return; }
+    var t = data.type;
+    if (t === 'status') {
+      setStatus(data.state);
+      log('Status: ' + data.state);
+    } else if (t === 'transcription') {
+      addBubble('user', data.text);
+      log('Transcription: ' + data.text);
+    } else if (t === 'response') {
+      addBubble('assistant', data.text);
+      log('Response: ' + data.text);
+    } else if (t === 'tts_start') {
+      startPlayback();
+      log('TTS stream started');
+    } else if (t === 'tts_end') {
+      log('TTS stream ended');
+      ttsComplete = true;
+    } else if (t === 'error') {
+      log('Error: ' + data.message);
+    } else {
+      log('Unknown message type: ' + t);
+    }
+  }
+
+  // ---- Mic capture ----
+  async function initMic() {
+    if (micStream) return;
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: SAMPLE_RATE,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+      micCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+      const source = micCtx.createMediaStreamSource(micStream);
+      micProcessor = micCtx.createScriptProcessor(BUFFER_SIZE, 1, 1);
+
+      micProcessor.onaudioprocess = function(e) {
+        if (!isRecording) return;
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        const input = e.inputBuffer.getChannelData(0);
+        // Convert float32 to PCM16
+        const pcm16 = new Int16Array(input.length);
+        for (let i = 0; i < input.length; i++) {
+          var s = Math.max(-1, Math.min(1, input[i]));
+          pcm16[i] = s < 0 ? s * 32768 : s * 32767;
+        }
+        ws.send(pcm16.buffer);
+      };
+
+      source.connect(micProcessor);
+      micProcessor.connect(micCtx.destination);
+      log('Mic initialized');
+    } catch (err) {
+      log('Mic access denied: ' + err.message);
+    }
+  }
+
+  function startRecording() {
+    if (isRecording) return;
+    initMic().then(function() {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        log('WebSocket not connected');
+        return;
+      }
+      isRecording = true;
+      stopPlayback();
+      setStatus('recording');
+      talkBtn.classList.add('recording');
+      talkBtn.textContent = 'Recording...';
+      ws.send(JSON.stringify({ type: 'start_recording' }));
+      log('Recording started');
+    });
+  }
+
+  function stopRecording() {
+    if (!isRecording) return;
+    isRecording = false;
+    talkBtn.classList.remove('recording');
+    talkBtn.textContent = 'Hold to Talk';
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'stop_recording' }));
+    }
+    log('Recording stopped');
+  }
+
+  // ---- Voice select change ----
+  voiceSelect.addEventListener('change', function() {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'config', voice: voiceSelect.value }));
+      log('Voice changed to: ' + voiceSelect.value);
+    }
+  });
+
+  // ---- Push-to-talk: button ----
+  talkBtn.addEventListener('pointerdown', function(e) {
+    e.preventDefault();
+    startRecording();
+  });
+  talkBtn.addEventListener('pointerup', function(e) {
+    e.preventDefault();
+    stopRecording();
+  });
+  talkBtn.addEventListener('pointerleave', function(e) {
+    if (isRecording) stopRecording();
+  });
+
+  // ---- Push-to-talk: Space key ----
+  document.addEventListener('keydown', function(e) {
+    if (e.code === 'Space' && !e.repeat && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'SELECT') {
+      e.preventDefault();
+      startRecording();
+    }
+  });
+  document.addEventListener('keyup', function(e) {
+    if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'SELECT') {
+      e.preventDefault();
+      stopRecording();
+    }
+  });
+
+  // ---- Init ----
+  loadVoices();
+  connectWS();
+
+  window.addEventListener('beforeunload', function() {
+    if (ws) { try { ws.close(); } catch(e) {} }
+    stopPlayback();
+    if (micStream) { micStream.getTracks().forEach(function(t) { t.stop(); }); }
+    if (micCtx) { try { micCtx.close(); } catch(e) {} }
+  });
+})();
+</script>
+</body>
+</html>

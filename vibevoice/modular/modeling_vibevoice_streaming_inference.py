@@ -898,7 +898,7 @@ class VibeVoiceStreamingForConditionalGenerationInference(VibeVoiceStreamingPreT
         return speech[: len(speech) // 2]
     
 
-AutoModelForCausalLM.register(VibeVoiceStreamingConfig, VibeVoiceStreamingForConditionalGenerationInference)
+AutoModelForCausalLM.register(VibeVoiceStreamingConfig, VibeVoiceStreamingForConditionalGenerationInference, exist_ok=True)
 
 __all__ = [
     "VibeVoiceStreamingForConditionalGenerationInference",
