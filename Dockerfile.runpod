@@ -33,7 +33,7 @@ RUN pip3 install --no-cache-dir \
     "uvicorn[standard]" fastapi pydub requests
 
 # Install VibeVoice from GitHub (with exist_ok fixes for newer transformers)
-RUN pip3 install --no-cache-dir "vibevoice@git+https://github.com/barockok/VibeVoice.git@feat/live-conversation-demo"
+RUN pip3 install --no-cache-dir "vibevoice@git+https://github.com/barockok/VibeVoice.git@main"
 
 # Download all three models at build time
 RUN pip3 install --no-cache-dir hf_transfer
