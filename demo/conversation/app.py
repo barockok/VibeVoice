@@ -199,6 +199,87 @@ def _generate_quick_reply(responder, transcription: str, context: str, tone: str
         return ""
 
 
+# ── Streaming STT (session-based) ──
+
+import uuid as _uuid
+
+# In-memory session store: session_id -> accumulated audio (float32 ndarray)
+_stt_sessions: dict = {}
+
+
+@app.post("/api/stt/stream/start")
+async def stt_stream_start():
+    """Start a streaming STT session. Returns session_id."""
+    session_id = str(_uuid.uuid4())[:8]
+    _stt_sessions[session_id] = {"audio": np.array([], dtype=np.float32), "text": ""}
+    return JSONResponse({"session_id": session_id})
+
+
+@app.post("/api/stt/stream/chunk/{session_id}")
+async def stt_stream_chunk(session_id: str, request: Request):
+    """Send an audio chunk to an active STT session. Returns current partial transcript."""
+    if session_id not in _stt_sessions:
+        return JSONResponse({"error": "session not found"}, status_code=404)
+
+    asr = app.state.asr
+    session = _stt_sessions[session_id]
+
+    body = await request.body()
+    if not body:
+        return JSONResponse({"text": session["text"]})
+
+    pcm16 = np.frombuffer(body, dtype=np.int16)
+    audio_float = pcm16.astype(np.float32) / 32768.0
+
+    # Append to accumulated audio
+    session["audio"] = np.concatenate([session["audio"], audio_float])
+
+    # Transcribe the full accumulated audio
+    if session["audio"].size < SAMPLE_RATE * 0.3:
+        return JSONResponse({"text": ""})
+
+    try:
+        transcription = await asyncio.to_thread(asr.transcribe, session["audio"], SAMPLE_RATE)
+        session["text"] = transcription if not _is_noise(transcription) else session["text"]
+    except Exception as e:
+        traceback.print_exc()
+        # Keep previous text on error
+        pass
+
+    return JSONResponse({"text": session["text"]})
+
+
+@app.post("/api/stt/stream/end/{session_id}")
+async def stt_stream_end(session_id: str, request: Request):
+    """Finalize a streaming STT session. Returns final transcript + quick reply."""
+    if session_id not in _stt_sessions:
+        return JSONResponse({"error": "session not found"}, status_code=404)
+
+    session = _stt_sessions.pop(session_id)
+    text = session["text"]
+
+    if not text.strip():
+        return JSONResponse({"text": "", "quick_reply": "", "is_noise": True})
+
+    # Generate quick reply using Qwen
+    call_context = request.headers.get("x-call-context", "")
+    call_tone = request.headers.get("x-call-tone", "")
+
+    responder = app.state.responder
+    try:
+        quick_reply = await asyncio.to_thread(
+            _generate_quick_reply, responder, text, call_context, call_tone
+        )
+    except Exception:
+        quick_reply = ""
+
+    return JSONResponse({
+        "text": text,
+        "quick_reply": quick_reply,
+        "is_noise": False,
+    })
+
+
 @app.post("/api/tts")
 async def tts_endpoint(request: Request):
     """Synthesize text to speech, streaming PCM16 audio bytes."""
